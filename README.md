@@ -127,7 +127,7 @@ Of course this also works for apps with a lot of atomic / molecular components a
 Inside your component-library you then can just install `json-themes` via
 
 ```
-npm install @circle/json-themes
+npm install @crannbog/json-themes
 ```
 
 While the library is designed to support runtime-exchangeable theme configs stored in JSON, it's recommended to have at least one theme specified as `export const ...` inside a typescript / javascript file - because here you will get full developer experience with all the options strongly typed - and it's there from the beginning, just to avoid style-flickering.
