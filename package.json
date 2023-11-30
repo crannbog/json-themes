@@ -1,0 +1,87 @@
+{
+  "name": "@crannbog/json-themes",
+  "version": "1.3.1",
+  "description": "A toolbox around theming for component libraries for SPAs",
+  "files": [
+    "./dist/*"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/module.js",
+  "typings": "./dist/index.d.ts",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.es.js",
+      "require": "./dist/index.umd.js",
+      "browser": "./dist/index.umd.js",
+      "default": "./dist/index.umd.js"
+    }
+  },
+  "source": "src/index.ts",
+  "sideEffects": false,
+  "scripts": {
+    "test": "echo test",
+    "lint": "eslint",
+    "check": "tsc --noEmit --emitDeclarationOnly false",
+    "start": "vite serve src/app",
+    "pkg-json": "node scripts/create-pkg-json.cjs",
+    "build": "tsc --project tsconfig.build.json && vite build && tsc && npm run pkg-json && cp ./README.md ./dist/README.md && cp ./LICENSE ./dist/LICENSE",
+    "handle-version": "node scripts/handle-version.cjs",
+    "pub": "npm run lint && npm test && npm run handle-version && npm run build && cd ./dist && npm publish"
+  },
+  "keywords": [
+    "react",
+    "utils",
+    "javascript",
+    "typescript",
+    "library",
+    "component library",
+    "theming",
+    "react theming"
+  ],
+  "author": "cmmdmx",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crannbog/json-themes"
+  },
+  "workspaces": {
+    "packages": [
+      "src/lib/*",
+      "src/app/*"
+    ]
+  },
+  "devDependencies": {
+    "@ava/typescript": "^4.1.0",
+    "@babel/core": "^7.23.5",
+    "@types/babel__core": "^7.20.5",
+    "@types/react": "^18.2.39",
+    "@typescript-eslint/eslint-plugin": "^6.13.1",
+    "@typescript-eslint/parser": "^6.13.1",
+    "@vitejs/plugin-react": "^4.2.0",
+    "eslint": "^8.54.0",
+    "eslint-plugin-react": "^7.33.2",
+    "np": "^9.0.0",
+    "react": "^18.2.0",
+    "typescript": "^5.3.2",
+    "vite": "^5.0.4"
+  },
+  "dependencies": {
+    "deepmerge-ts": "^5.1.0",
+    "goober": "^2.1.13"
+  },
+  "peerDependencies": {
+    "react": ">=17.0.2"
+  },
+  "browserslist": [
+    "defaults"
+  ],
+  "engines": {
+    "node": ">=14",
+    "npm": ">=8"
+  },
+  "staticFiles": {
+    "staticPath": "src/static"
+  }
+}
