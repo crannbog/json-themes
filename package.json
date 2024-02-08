@@ -5,6 +5,7 @@
   "files": [
     "./dist/*"
   ],
+  "private": false,
   "main": "./dist/index.js",
   "module": "./dist/module.js",
   "typings": "./dist/index.d.ts",
@@ -40,7 +41,7 @@
     "theming",
     "react theming"
   ],
-  "author": "cmmdmx",
+  "author": "@crannbog",
   "license": "MIT",
   "repository": {
     "type": "git",
