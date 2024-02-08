@@ -29,7 +29,7 @@
     "pkg-json": "node scripts/create-pkg-json.cjs",
     "build": "tsc --project tsconfig.build.json && vite build && tsc && npm run pkg-json && cp ./README.md ./dist/README.md && cp ./LICENSE ./dist/LICENSE",
     "handle-version": "node scripts/handle-version.cjs",
-    "pub": "npm run lint && npm test && npm run handle-version && npm run build && cd ./dist && npm publish"
+    "pub": "npm run lint && npm test && npm run handle-version && npm run build && cd ./dist && npm publish --access public"
   },
   "keywords": [
     "react",
