@@ -416,7 +416,8 @@
           "Y",
           "Z",
           "_",
-          "Q"
+          "Q",
+          "t"
         ]
       }
     ],
@@ -629,12 +630,23 @@
     ],
     "no-empty-function": "off",
     "@typescript-eslint/no-unused-vars": [
-      "error"
+      2
     ],
     "@typescript-eslint/no-empty-function": "off",
     "@typescript-eslint/no-explicit-any": [
       2
     ]
   },
-  "overrides": []
+  "overrides": [
+    {
+      "files": [
+        "*.d.ts"
+      ],
+      "rules": {
+        "spaced-comment":    "off",
+        "init-declarations": "off"
+      }
+    }
+  ],
+  "ignorePatterns": []
 }

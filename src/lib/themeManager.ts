@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { ThemingBackdropFilterDefinition,
+import { ComponentsConfig, IThemeManager, ThemeType, ThemingBackdropFilterDefinition,
     ThemingBeforeAfterDefinition,
     ThemingBorderDefinition,
     ThemingBorderMap,
@@ -12,11 +12,25 @@ import { ThemingBackdropFilterDefinition,
     ThemingFontDefinition,
     ThemingFontSet,
     ThemingGradientDefinition,
-    Transitionable } from "./types";
+    Transitionable } from "./types.ts";
 import { css, setup } from "goober";
-import { deepmerge } from "deepmerge-ts";
+import { deepmerge, deepmergeCustom } from "deepmerge-ts";
 import { prefix } from "goober/prefixer";
 import { createGlobalStyles } from "goober/global";
+
+const dollarVarRegex = /\$\$(?:[\w.]*\|?)/gm;
+
+const selectors = {
+    invalid:      "&:invalid,&[aria-invalid=true],&[aria-invalid=grammar],&[aria-invalid=spelling]",
+    checked:      "&:checked,&[aria-checked=true],&[aria-checked=mixed]",
+    pressed:      "&[aria-pressed=true],&[aria-pressed=mixed]",
+    current:      "&[aria-current=true],&[aria-current=page],&[aria-current=step],&[aria-current=location],&[aria-current=date],&[aria-current=time]",
+    focus:        "&:focus,&:focus-within",
+    focusVisible: "&:focus-visible",
+    hover:        "&:hover",
+    active:       "&:active",
+    disabled:     "&:disabled,&[aria-disabled=true]"
+};
 
 /**
  * A Function to properly sort CSS Selectors
@@ -25,16 +39,24 @@ import { createGlobalStyles } from "goober/global";
  * @returns sorted Array
  * @example an :active selector should always be higher in specificity than an :hover
  */
-const sortCssNestings = (a: [string, unknown], b: any) => {
-    if(a[0] === "&:hover") return 1;
-    if(a[0]?.includes("focus")) return -1;
-    if(a[0] === "&:focus-visible") return -1;
-    if(a[0] === "&:focus-within") return -1;
-    if(a[0] === "&:active") return 2;
-    if(a[0] === "&:disabled") return 3;
-    if(a[0] === "&:checked") return 0;
+// eslint-disable-next-line complexity
+const sortCssNestings = (a: [string, unknown], b: [string, unknown]) => {
+    const order = [
+        "checked",
+        "invalid",
+        "pressed",
+        "current",
+        "focus",
+        "focus-visible",
+        "hover",
+        "active",
+        "disabled"
+    ];
 
-    return a[0].toString() > b[0].toString() ? 1 : -1;
+    const _a = order.findIndex(x => a[0].includes(x));
+    const _b = order.findIndex(x => b[0].includes(x));
+
+    return _a - _b;
 };
 
 const getVarName = (str: string) => str.slice(2);
@@ -46,12 +68,14 @@ const getVarName = (str: string) => str.slice(2);
  * @param {*} value optional value to search on
  * @returns resolved variable from path
  */
-const getDeepAttribute = (root: Record<string, any>, path: string[], value: any = null): any => {
-    const val = value || root;
+export const getDeepAttribute = (root: Record<string, any>, path: string[], value: any = null): any => {
+    const val = value ?? root;
 
     if(!path || path.length === 0) {
-        if(typeof val === "string" && val.startsWith("$$"))
-            return getDeepAttribute(root, getVarName(val).split("."));
+        if(typeof val === "string" && val.includes("$$"))
+            return `${val}`.replace(dollarVarRegex,
+                str => getDeepAttribute(root, getVarName(str.replace("|", "")).split("."))
+            );
 
         return val;
     }
@@ -90,7 +114,9 @@ const resolveGlobalsVar = (varStr: string, theme: ThemingConfig, customResolver?
  * @returns {string} either the value or the resolved value from a variable
  */
 const resolveGlobalsVarString = (value: unknown, theme: ThemingConfig, customResolver?: (res: unknown) => any) => {
-    return (`${value}`.replace(/\$\$[\w.]*/gm, str => resolveGlobalsVar(str, theme, customResolver)));
+    return (`${value}`.replace(dollarVarRegex, str => {
+        return resolveGlobalsVar(str.replaceAll("|", ""), theme, customResolver);
+    }));
 };
 
 /**
@@ -107,7 +133,7 @@ const resolvePropsVars = (props: any, theme: ThemingConfig) => {
     const resolvedValues: Array<any> = keys?.map(key => {
         const value = props[key];
 
-        if(typeof value === "string" && value.startsWith("$$"))
+        if(typeof value === "string")
             return resolveGlobalsVarString(value, theme);
 
 
@@ -149,7 +175,7 @@ const resolveBackdropFilterDefinition = (obj: ThemingBackdropFilterDefinition | 
     return {
         "backdropFilter":                             resolveGlobalsVarString((obj as ThemingBackdropFilterDefinition).definition, theme),
         "@supports not (backdrop-filter: blur(1px))": {
-            background: resolveGlobalsVarString((obj as ThemingBackdropFilterDefinition).fallbackBackground, theme)
+            background: resolveColorsDefinition((obj as ThemingBackdropFilterDefinition).fallbackBackground, theme, true)
         }
     };
 };
@@ -157,7 +183,13 @@ const resolveBackdropFilterDefinition = (obj: ThemingBackdropFilterDefinition | 
 /**
  * theming border set defintion to CSS
  */
+// eslint-disable-next-line complexity
 const borderSetToCss = (borderSet: ThemingBorderSet | string, theme: ThemingConfig): object => {
+    if(Array.isArray(borderSet))
+        return deepmerge(
+            ...borderSet.map(_def => borderSetToCss(_def, theme)).flat(1)
+        ) as object;
+
     const set: ThemingBorderSet = typeof borderSet === "string" ? theme.sets.borderSets[getVarName(borderSet)] : borderSet;
 
     if(!set) return {};
@@ -170,7 +202,7 @@ const borderSetToCss = (borderSet: ThemingBorderSet | string, theme: ThemingConf
         );
     };
 
-    const resolveMap = (bmp: Transitionable<ThemingBorderMap>) => {
+    const resolveBorderMap = (bmp: Transitionable<ThemingBorderMap>) => {
         return Object.assign({},
             resolveDefinition(bmp, ""),
             bmp.transitionSpeed && { transitionDuration: resolveGlobalsVarString(bmp.transitionSpeed, theme) },
@@ -183,33 +215,40 @@ const borderSetToCss = (borderSet: ThemingBorderSet | string, theme: ThemingConf
     };
 
     const resolvedSet = Object.assign({},
-        resolveMap(set),
-        set.__hover && { "&:hover": resolveMap(set.__hover) },
-        set.__active && { "&:active": resolveMap(set.__active) },
-        set.__focus && { "&:focus,&focus-within": resolveMap(set.__focus) },
-        set.__focusVisible && { "&:focus-visible": resolveMap(set.__focusVisible) },
-        set.__checked && { "&:checked,&[aria-checked=true]": resolveMap(set.__checked) },
+        resolveBorderMap(set),
+        set.__hover && { [selectors.hover]: resolveBorderMap(set.__hover) },
+        set.__active && { [selectors.active]: resolveBorderMap(set.__active) },
+        set.__focus && { [selectors.focus]: resolveBorderMap(set.__focus) },
+        set.__focusVisible && { [selectors.focusVisible]: resolveBorderMap(set.__focusVisible) },
+        set.__checked && { [selectors.checked]: resolveBorderMap(set.__checked) },
+        set.__pressed && { [selectors.pressed]: resolveBorderMap(set.__pressed) },
+        set.__current && { [selectors.current]: resolveBorderMap(set.__current) },
+        set.__invalid && { [selectors.invalid]: resolveBorderMap(set.__invalid) },
         set.__disabled && {
-            "&:disabled,&[aria-disabled=true]": {
-                ...resolveMap(set.__disabled),
+            [selectors.disabled]: {
+                ...resolveBorderMap(set.__disabled),
                 "pointer-events": "none"
             }
         }
     );
 
-    return set.__extends ? Object.assign({},
+    return Object.assign({},
         ...Object.entries(deepmerge(
-            borderSetToCss(set.__extends, theme), resolvedSet))
+            set.__extends ? borderSetToCss(set.__extends, theme) : 0, resolvedSet))
 			.sort(sortCssNestings)
-			.map(([key, value]) => ({ [key]: value }))) :
-        resolvedSet;
+			.map(([key, value]) => ({ [key]: value })));
 };
 
 /**
  * theming color set defintion to CSS
  */
 // eslint-disable-next-line complexity
-const colorSetToCss = (colorSet: ThemingColorSet | string, theme: ThemingConfig): object => {
+const colorSetToCss = (colorSet: ThemingColorSet | ThemingColorSet[] | string, theme: ThemingConfig): object => {
+    if(Array.isArray(colorSet))
+        return deepmerge(
+            ...colorSet.map(_def => colorSetToCss(_def, theme)).flat(1)
+        ) as object;
+
     const set: ThemingColorSet = typeof colorSet === "string" ? theme.sets.colorSets[getVarName(colorSet)] : colorSet;
 
     if(!set) return {};
@@ -230,38 +269,46 @@ const colorSetToCss = (colorSet: ThemingColorSet | string, theme: ThemingConfig)
 
     const resolvedSet = Object.assign({},
         resolveColorMap(set),
-        set.__hover && { "&:hover": resolveColorMap(set.__hover) },
-        set.__active && { "&:active": resolveColorMap(set.__active) },
-        set.__focus && { "&:focus,&:focus-within": resolveColorMap(set.__focus) },
-        set.__focusVisible && { "&:focus-visible": resolveColorMap(set.__focusVisible) },
-        set.__checked && { "&:checked,&[aria-checked=true]": resolveColorMap(set.__checked) },
+        set.__hover && { [selectors.hover]: resolveColorMap(set.__hover) },
+        set.__active && { [selectors.active]: resolveColorMap(set.__active) },
+        set.__focus && { [selectors.focus]: resolveColorMap(set.__focus) },
+        set.__focusVisible && { [selectors.focusVisible]: resolveColorMap(set.__focusVisible) },
+        set.__checked && { [selectors.checked]: resolveColorMap(set.__checked) },
+        set.__pressed && { [selectors.pressed]: resolveColorMap(set.__pressed) },
+        set.__current && { [selectors.current]: resolveColorMap(set.__current) },
+        set.__invalid && { [selectors.invalid]: resolveColorMap(set.__invalid) },
         set.__disabled && {
-            "&:disabled,&[aria-disabled=true]": {
+            [selectors.disabled]: {
                 ...resolveColorMap(set.__disabled),
                 "pointer-events": "none"
             }
         },
         set.__selection && {
-            "::selection": {
+            "&::selection": {
                 color:      resolveGlobalsVarString(set.__selection.foreground, theme),
                 background: resolveColorsDefinition(set.__selection.background, theme)
             }
         }
     );
 
-    return set.__extends ? Object.assign({},
+    return Object.assign({},
         ...Object.entries(deepmerge(
-            colorSetToCss(set.__extends, theme), resolvedSet))
+            set.__extends ? colorSetToCss(set.__extends, theme) : {}, resolvedSet))
 			.sort(sortCssNestings)
-			.map(([key, value]) => ({ [key]: value }))) :
-        resolvedSet;
+			.map(([key, value]) => ({ [key]: value })));
 };
 
 /**
  * theming font set defintion to CSS
  */
-const fontSetToCss = (colorSet: ThemingFontSet | string, theme: ThemingConfig): object => {
-    const set: ThemingFontSet = typeof colorSet === "string" ? theme.sets.fontSets[getVarName(colorSet)] : colorSet;
+// eslint-disable-next-line complexity
+const fontSetToCss = (fontSet: ThemingFontSet | ThemingFontSet[] | string, theme: ThemingConfig): object => {
+    if(Array.isArray(fontSet))
+        return deepmerge(
+            ...fontSet.map(_def => fontSetToCss(_def, theme)).flat(1)
+        ) as object;
+
+    const set: ThemingFontSet = typeof fontSet === "string" ? theme.sets.fontSets[getVarName(fontSet)] : fontSet;
 
     if(!set) return {};
 
@@ -280,32 +327,40 @@ const fontSetToCss = (colorSet: ThemingFontSet | string, theme: ThemingConfig): 
 
     const resolvedSet = Object.assign({},
         resolveFontMap(set),
-        set.__hover && { "&:hover": resolveFontMap(set.__hover) },
-        set.__active && { "&:active": resolveFontMap(set.__active) },
-        set.__focus && { "&:focus,&focus-within": resolveFontMap(set.__focus) },
-        set.__focusVisible && { "&:focus-visible": resolveFontMap(set.__focusVisible) },
-        set.__checked && { "&:checked,&[aria-checked=true]": resolveFontMap(set.__checked) },
+        set.__hover && { [selectors.hover]: resolveFontMap(set.__hover) },
+        set.__active && { [selectors.active]: resolveFontMap(set.__active) },
+        set.__focus && { [selectors.focus]: resolveFontMap(set.__focus) },
+        set.__focusVisible && { [selectors.focusVisible]: resolveFontMap(set.__focusVisible) },
+        set.__checked && { [selectors.checked]: resolveFontMap(set.__checked) },
+        set.__pressed && { [selectors.pressed]: resolveFontMap(set.__pressed) },
+        set.__current && { [selectors.current]: resolveFontMap(set.__current) },
+        set.__invalid && { [selectors.invalid]: resolveFontMap(set.__invalid) },
         set.__disabled && {
-            "&:disabled,&[aria-disabled=true]": {
+            [selectors.disabled]: {
                 ...resolveFontMap(set.__disabled),
                 "pointer-events": "none"
             }
         }
     );
 
-    return set.__extends ? Object.assign({},
+    return Object.assign({},
         ...Object.entries(deepmerge(
-            fontSetToCss(set.__extends, theme), resolvedSet))
+            set.__extends ? fontSetToCss(set.__extends, theme) : {}, resolvedSet))
 			.sort(sortCssNestings)
-			.map(([key, value]) => ({ [key]: value }))) :
-        resolvedSet;
+			.map(([key, value]) => ({ [key]: value })));
 };
 
 /**
  * resolve box defintions from either global boxSets or from neighbour variant definitions
  */
+// eslint-disable-next-line complexity
 const resolveBoxDefinition = (def: string | ThemingBoxSet | undefined, theme: ThemingConfig, context?: string): ThemingBoxSet | null => {
     if(!def) return null;
+
+    if(Array.isArray(def))
+        return deepmerge(
+            def.map(x => resolveBoxDefinition(x, theme, context)).flat(1)
+        ) as object;
 
     if(typeof def === "string" && def.startsWith("$$")) {
         const guess = theme.sets.boxSets[getVarName(def)] || null;
@@ -315,7 +370,12 @@ const resolveBoxDefinition = (def: string | ThemingBoxSet | undefined, theme: Th
         if(context) {
             const otherSource = getDeepAttribute(theme.components, context.split("."), null);
 
-            if(otherSource[getVarName(def)]) return otherSource[getVarName(def)];
+            if(context.includes("parts") && otherSource[getVarName(def)]) return otherSource[getVarName(def)];
+            if(otherSource.variants && otherSource.variants[getVarName(def)]) return resolveBoxDefinition(
+                otherSource.variants[getVarName(def)]?.theming,
+                theme,
+                context
+            );
 
             return null;
         }
@@ -328,14 +388,8 @@ const resolveBoxDefinition = (def: string | ThemingBoxSet | undefined, theme: Th
     return null;
 };
 
-const resolveBeforeAfter = (mode: "before" | "after", inp:ThemingBeforeAfterDefinition, target: Array<any>, theme: ThemingConfig, selector?: ":hover" | ":active" | ":focus" | ":focus-visible" | ":disabled" | ":focus-within" | ":checked" | "[aria-checked=true]") => {
-    const slctr = `&${selector ? `${selector}` : ""}::${mode}`;
-
-    if(selector === ":focus")
-        resolveBeforeAfter(mode, inp, target, theme, ":focus-within");
-
-    if(selector === ":checked")
-        resolveBeforeAfter(mode, inp, target, theme, "[aria-checked=true]");
+const resolveBeforeAfter = (mode: "before" | "after", inp:ThemingBeforeAfterDefinition, target: Array<any>, theme: ThemingConfig) => {
+    const slctr = `&::${mode}`;
 
     return target.push({
         [slctr]: Object.fromEntries(
@@ -344,8 +398,7 @@ const resolveBeforeAfter = (mode: "before" | "after", inp:ThemingBeforeAfterDefi
                 if(key === "transitionSpeed") return (["transitionDuration", resolveGlobalsVarString(inp[key], theme)]);
 
                 return ([key, resolveGlobalsVarString(inp && inp[key], theme)]);
-            }
-            )
+            })
         )
     });
 };
@@ -360,17 +413,21 @@ const boxDefToCssProps = (boxDef: ThemingBoxSet | null, theme: ThemingConfig, co
 
     if(!boxDef) return [];
 
+    if(Array.isArray(boxDef))
+        return [(deepmerge(...(boxDef.map(_dev => boxDefToCssProps(_dev, theme, context)).flat(1))) as object[])];
+
     if(boxDef.__extends)
         res.push(...boxDefToCssProps(
-            resolveBoxDefinition(boxDef.__extends, theme, context), theme)
-        );
+            resolveBoxDefinition(boxDef.__extends, theme, context),
+            theme,
+            context
+        ));
 
-
-    if(boxDef.animation)
+    if(boxDef.transform)
         res.push({
-            animation: resolveGlobalsVarString(boxDef.animation, theme)
+            "transform":   resolveGlobalsVarString(boxDef.transform, theme),
+            "will-change": "transform"
         });
-
 
     if(boxDef.borderSet)
         res.push(borderSetToCss(boxDef.borderSet, theme));
@@ -407,68 +464,50 @@ const boxDefToCssProps = (boxDef: ThemingBoxSet | null, theme: ThemingConfig, co
     if(boxDef.after)
         resolveBeforeAfter("after", boxDef.after, res, theme);
 
-    if(boxDef.__hover) {
-        if(boxDef.__hover.before)
-            resolveBeforeAfter("before", boxDef.__hover.before, res, theme, ":hover");
+    if(boxDef.__hover)
+        res.splice(0, 0, { [selectors.hover]: boxDefToCssProps(boxDef.__hover, theme, context)
+            .reduce((prev, curr) => ({ ...prev, ...curr }), {}) });
 
-        if(boxDef.__hover.after)
-            resolveBeforeAfter("after", boxDef.__hover.after, res, theme, ":hover");
-    }
+    if(boxDef.__active)
+        res.splice(0, 0, { [selectors.active]: boxDefToCssProps(boxDef.__active, theme, context)
+            .reduce((prev, curr) => ({ ...prev, ...curr }), {}) });
 
-    if(boxDef.__active) {
-        if(boxDef.__active.before)
-            resolveBeforeAfter("before", boxDef.__active.before, res, theme, ":active");
+    if(boxDef.__focus)
+        res.splice(0, 0, { [selectors.focus]: boxDefToCssProps(boxDef.__focus, theme, context)
+            .reduce((prev, curr) => ({ ...prev, ...curr }), {}) });
 
-        if(boxDef.__active.after)
-            resolveBeforeAfter("after", boxDef.__active.after, res, theme, ":active");
-    }
+    if(boxDef.__focusVisible)
+        res.splice(0, 0, { [selectors.focusVisible]: boxDefToCssProps(boxDef.__focusVisible, theme, context)
+            .reduce((prev, curr) => ({ ...prev, ...curr }), {}) });
 
-    if(boxDef.__focus) {
-        if(boxDef.__focus.before)
-            resolveBeforeAfter("before", boxDef.__focus.before, res, theme, ":focus");
+    if(boxDef.__checked)
+        res.splice(0, 0, { [selectors.checked]: boxDefToCssProps(boxDef.__checked, theme, context)
+            .reduce((prev, curr) => ({ ...prev, ...curr }), {}) });
 
-        if(boxDef.__focus.after)
-            resolveBeforeAfter("after", boxDef.__focus.after, res, theme, ":focus");
-    }
+    if(boxDef.__disabled)
+        res.splice(0, 0, { [selectors.disabled]: boxDefToCssProps(boxDef.__disabled, theme, context)
+            .reduce((prev, curr) => ({ ...prev, ...curr }), {}) });
 
-    if(boxDef.__focusVisible) {
-        if(boxDef.__focusVisible.before)
-            resolveBeforeAfter("before", boxDef.__focusVisible.before, res, theme, ":focus-visible");
+    if(boxDef.__invalid)
+        res.splice(0, 0, { [selectors.invalid]: boxDefToCssProps(boxDef.__invalid, theme, context)
+            .reduce((prev, curr) => ({ ...prev, ...curr }), {}) });
 
-        if(boxDef.__focusVisible.after)
-            resolveBeforeAfter("after", boxDef.__focusVisible.after, res, theme, ":focus-visible");
-    }
+    if(boxDef.__pressed)
+        res.splice(0, 0, { [selectors.pressed]: boxDefToCssProps(boxDef.__pressed, theme, context)
+            .reduce((prev, curr) => ({ ...prev, ...curr }), {}) });
 
-    if(boxDef.__checked) {
-        if(boxDef.__checked.before)
-            resolveBeforeAfter("before", boxDef.__checked.before, res, theme, ":checked");
+    if(boxDef.__current)
+        res.splice(0, 0, { [selectors.current]: boxDefToCssProps(boxDef.__current, theme, context)
+            .reduce((prev, curr) => ({ ...prev, ...curr }), {}) });
 
-        if(boxDef.__checked.after)
-            resolveBeforeAfter("after", boxDef.__checked.after, res, theme, ":checked");
-    }
 
-    if(boxDef.__disabled) {
-        if(boxDef.__disabled.before)
-            resolveBeforeAfter("before", boxDef.__disabled.before, res, theme, ":disabled");
+    if(res.length === 0) return [];
 
-        if(boxDef.__disabled.after)
-            resolveBeforeAfter("after", boxDef.__disabled.after, res, theme, ":disabled");
-    }
+    const merged = deepmerge(...res) as object;
+    const sorted = Object.fromEntries(Object.entries(merged).sort(sortCssNestings));
 
-    return res;
+    return [sorted];
 };
-
-export type ComponentsConfig = {
-    component: string
-    variants: {
-        variant: string;
-        className: string;
-        defaultProps: object;
-        parts: {
-            [key: string]: string
-        }
-    }[]
-}
 
 /**
  * Resolve a Component in themeConfig.components. Includes resolving default def, variants and defaultProps
@@ -477,7 +516,7 @@ export type ComponentsConfig = {
  * @param theme The theming config
  * @returns ComponentConfig
  */
-const resolveComponent = (component: string, theme: ThemingConfig): ComponentsConfig => {
+export const resolveComponent = (component: string, theme: ThemingConfig): ComponentsConfig => {
     const componentConfig = theme.components[component];
 
     if(!componentConfig)
@@ -500,45 +539,41 @@ const resolveComponent = (component: string, theme: ThemingConfig): ComponentsCo
         },
         ...(componentConfig.variants ? Object.keys(componentConfig.variants).filter(x => x !== "default").map(vrnt => componentConfig.variants && ({
             variant: vrnt,
-            parts:   (componentConfig.variants[vrnt]?.parts || componentConfig.default?.parts) ? Object.entries(
+            parts:   (componentConfig.variants[vrnt]?.parts ?? componentConfig.default?.parts) ? Object.entries(
                 // merge parts from default into every variant per default
-                deepmerge({}, (componentConfig.default?.parts || {}), (componentConfig.variants[vrnt]?.parts as object || {}))
+                deepmerge({}, (componentConfig.default?.parts ?? {}), (componentConfig.variants[vrnt]?.parts as object ?? {}))
             ).map(([key, value]) => {
                 return ([key,
                     componentConfig.variants &&
                     resolveBoxDefinition(value, theme)
                 ]);
             }) : [],
-            boxDef: resolveBoxDefinition(componentConfig.variants[vrnt].theming, theme),
+            boxDef: resolveBoxDefinition(componentConfig.variants[vrnt].theming, theme, component),
             props:  componentConfig.variants[vrnt].defaultProps
         })) : [])
     ].filter(x => x && x.boxDef !== null); // eslint-disable-line no-undefined
 
     return deepmerge(extendedStuff, {
         component: component,
-        variants:  variants.map(vrnt => vrnt && ({
-            variant: vrnt.variant,
-            parts:   Object.fromEntries(vrnt.parts.map((part: any) => ([part[0], css(boxDefToCssProps(part[1], theme,
-                `${component}.${vrnt.variant === "default" ? "default.parts" : `variants.${vrnt.variant}.parts`}`) as never) || ""]))),
-            className:    vrnt.boxDef ? css(boxDefToCssProps(vrnt.boxDef, theme) as any) : "",
-            defaultProps: resolvePropsVars(vrnt.props, theme) || {}
-        })) as ComponentsConfig["variants"]
+        variants:  variants.map(vrnt => {
+            if(!vrnt) return null;
+
+            // eslint-disable-next-line no-undefined
+            const context = vrnt.variant !== "default" ? `${component}` : undefined;
+            const cssProps = boxDefToCssProps(vrnt.boxDef, theme, context);
+
+            // console.log(component, vrnt.variant, cssProps);
+
+            return ({
+                variant:   vrnt.variant,
+                className: vrnt.boxDef ? css(cssProps as any) : "",
+                parts:     Object.fromEntries(vrnt.parts.map((part: any) => ([part[0], css(boxDefToCssProps(part[1], theme,
+                    `${component}.${vrnt.variant === "default" ? "default.parts" : `variants.${vrnt.variant}.parts`}`) as never) || ""]))),
+                defaultProps: resolvePropsVars(vrnt.props, theme) || {}
+            });
+        }) as ComponentsConfig["variants"]
     });
 };
-
-export type IThemeManager = {
-    readonly __loadedThemes: Array<ThemingConfig>
-    readonly __lastActiveTheme: {
-        name: string,
-        components: ComponentsConfig[],
-        globalStyles: Function // eslint-disable-line @typescript-eslint/ban-types
-    } | null
-    init: (componentCreationFunction: Function) => void // eslint-disable-line @typescript-eslint/ban-types
-    loadTheme: (themeConfig: ThemingConfig, pool?: ThemingConfig[]) => {
-        components: ComponentsConfig[],
-        globalStyles: Function // eslint-disable-line @typescript-eslint/ban-types
-    } | null
-}
 
 /**
  * resolve a configuration object with inheritance
@@ -547,7 +582,7 @@ export type IThemeManager = {
  * @param themesPool other not yet loaded configs
  * @returns a resolved config (merged with inheritants)
  */
-const resolveConfig = (themeConfig: ThemingConfig, themesCache: [], themesPool: ThemingConfig[]) => {
+const resolveConfig = (themeConfig: ThemingConfig, themesPool: ThemingConfig[]) => {
     const configKeys = Object.keys(themeConfig);
     const neededKeys = ["name", "components", "version", "globals", "sets"];
 
@@ -557,16 +592,22 @@ const resolveConfig = (themeConfig: ThemingConfig, themesCache: [], themesPool: 
         const resolveBasedOn = (conf: ThemingConfig): ThemingConfig => {
             if(!conf.basedOn || conf.basedOn === "") return conf;
 
-            const cachedTheme = themesCache.find((x: ThemingConfig) => x.name === conf.basedOn);
+            const merger = deepmergeCustom({
+                enableImplicitDefaultMerging: true,
+                mergeOthers(values, utils, meta) {
+                    if(meta?.parents.length === values.length && values.length > 1 && ([
+                        "theming", "colorSet", "borderSet", "fontSet"
+                    ] as (string | number | symbol)[]).includes(meta.key))
+                        return values;
 
-            if(cachedTheme)
-                return deepmerge(resolveBasedOn(cachedTheme), conf);
-
+                    return utils.actions.defaultMerge;
+                }
+            });
 
             if(themesPool) {
                 const res = themesPool.find((x: ThemingConfig) => x.name === conf.basedOn);
 
-                if(res) return deepmerge(resolveBasedOn(res), conf);
+                if(res) return merger(resolveBasedOn(res), conf);
             }
 
             return conf;
@@ -579,32 +620,25 @@ const resolveConfig = (themeConfig: ThemingConfig, themesCache: [], themesPool: 
 };
 
 export class ThemeManager implements IThemeManager {
-    __loadedThemes = [];
-    __lastActiveTheme: null | {
-        name: string,
-        components: ComponentsConfig[],
-        globalStyles: Function // eslint-disable-line @typescript-eslint/ban-types
-    } = null;
+    __lastActiveTheme: null | ThemeType = null;
 
     init(componentCreationFunction: Function) { // eslint-disable-line @typescript-eslint/ban-types
         setup(componentCreationFunction, prefix);
     }
 
+    // eslint-disable-next-line max-statements
     loadTheme(_themeConfig: ThemingConfig, pool?: ThemingConfig[]) {
         if(!_themeConfig) throw Error("No Theming Config found!");
 
-        const themeConfig = { ..._themeConfig };
+        const resolvedConfig = resolveConfig(deepmerge({}, _themeConfig), pool || []);
 
-        if(!this.__loadedThemes.find((x: ThemingConfig) => x.name === themeConfig.name))
-            this.__loadedThemes.push({ ...themeConfig } as never);
-
-        const resolvedConfig = resolveConfig(themeConfig, this.__loadedThemes as [], pool || []);
+        console.debug("Theming configuration:", resolvedConfig);
 
         if(resolvedConfig === null) return null;
 
         const components = Object.keys(resolvedConfig.components);
 
-        if(this.__lastActiveTheme?.name !== resolvedConfig.name) {
+        if(resolvedConfig.name) {
             const styleRoot = (document || window.document).getElementById("_goober");
 
             if(styleRoot)
@@ -613,21 +647,15 @@ export class ThemeManager implements IThemeManager {
             const GlobalStyles = createGlobalStyles`html,body {}`;
 
             const res = {
+                name:         resolvedConfig.name,
                 components:   components.map(comp => resolveComponent(comp, resolvedConfig)),
                 globalStyles: GlobalStyles
             };
 
-            this.__lastActiveTheme = {
-                name: resolvedConfig.name,
-                ...res
-            };
+            this.__lastActiveTheme = res;
 
             return res;
         }
-
-        if(this.__lastActiveTheme.name === resolvedConfig.name)
-            return this.__lastActiveTheme;
-
 
         return null;
     }

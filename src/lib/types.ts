@@ -18,11 +18,14 @@ export type Transitionable<T> = T & {
 
 type ThemingSet<T> = {
     __active?: Transitionable<T>,
+    __checked?: Transitionable<T>,
+    __current?: Transitionable<T>,
     __disabled?: Transitionable<T>,
     __focus?: Transitionable<T>,
     __focusVisible?: Transitionable<T>,
-    __hover?: Transitionable<T>
-    __checked?: Transitionable<T>
+    __hover?: Transitionable<T>,
+    __invalid?: Transitionable<T>,
+    __pressed?: Transitionable<T>
 } & Transitionable<T>
 
 export type ThemingDefinitionDefaults = ThemingDefinitionDefaultsEnum;
@@ -104,15 +107,15 @@ export type ThemingBeforeAfterDefinition = {
 };
 
 // Boxes
-export type ThemingBoxDefinition = Extendable<{
-    animation?: "fadeIn" | "popIn" | ThemingReference,
+export type ThemingBoxDefinition = ThemingSet<{
+    height?: ThemingDefinition,
+    padding?: ThemingDefinition,
+    width?: ThemingDefinition,
+    transform?: ThemingDefinition
+}> & Extendable<{
     borderSet?: string | ThemingBorderSet,
     colorSet?: string | ThemingColorSet,
-    fontSet?: string | ThemingFontSet,
-    height?: ThemingDefinition,
-    // margin?: ThemingDefinition,
-    padding?: ThemingDefinition,
-    width?: ThemingDefinition
+    fontSet?: string | ThemingFontSet
 }>;
 
 export type ThemingBoxSet = ThemingBoxDefinition & ThemingSet<{
@@ -154,12 +157,7 @@ export type ThemingComponents = {
     [key: string]: ThemingComponent
 }
 
-export type ThemingAnimations = {
-    [key: string]: string
-}
-
 export type ThemingConfigFile = {
-    animations?: ThemingAnimations
     assets?: {
         baseUrl?: string
     },
@@ -177,3 +175,37 @@ export type ThemingConfig = ThemingConfigFile;
 export type ThemeableComponentProps<T> = {
     variant?: string | null
 } & T;
+
+export type ComponentVariant = {
+    variant: string;
+    className: string;
+    defaultProps: object;
+    parts: {
+        [key: string]: string
+    }
+}
+
+export type ComponentsConfig = {
+    component: string
+    variants: ComponentVariant[]
+}
+
+export type ThemeType = {
+    name: string,
+    components: ComponentsConfig[],
+    globalStyles: Function // eslint-disable-line @typescript-eslint/ban-types
+}
+
+export type IThemeManager = {
+    readonly __lastActiveTheme: {
+        name: string,
+        components: ComponentsConfig[],
+        globalStyles: Function // eslint-disable-line @typescript-eslint/ban-types
+    } | null
+    init: (componentCreationFunction: Function) => void // eslint-disable-line @typescript-eslint/ban-types
+    loadTheme: (themeConfig: ThemingConfig, pool?: ThemingConfig[]) => {
+        components: ComponentsConfig[],
+        globalStyles: Function // eslint-disable-line @typescript-eslint/ban-types,
+        name: string
+    } | null
+}
