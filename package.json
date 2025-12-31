@@ -1,0 +1,59 @@
+{
+  "name": "@crannbog/json-themes",
+  "private": true,
+  "version": "0.0.0",
+  "description": "A toolbox around theming for component libraries for SPAs, MPAs, SSGs",
+  "type": "module",
+  "main": "./dist/json-themes.umd.cjs",
+  "module": "./dist/json-themes.js",
+  "types": "./dist/types.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/json-themes.js",
+      "require": "./dist/json-themes.umd.js"
+    },
+    "./types.ts": "./dist/types.ts"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "dev": "vite",
+    "pkg-json": "node scripts/create-pkg-json.cjs",
+    "build": "tsc && vite build  && npm run pkg-json && cp ./src/types.ts ./dist/types.ts && cp ./README.md ./dist/README.md && cp ./LICENSE ./dist/LICENSE",
+    "preview": "vite preview",
+    "test": "tsc --noEmit && node src/tests/index.ts",
+    "pub": "npm run lint && npm test && npm run handle-version && npm run build && cd ./dist && npm publish"
+  },
+  "keywords": [
+    "react",
+    "utils",
+    "javascript",
+    "typescript",
+    "library",
+    "component library",
+    "theming",
+    "react theming"
+  ],
+  "author": "@crannbog",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crannbog/json-themes"
+  },
+  "engines": {
+    "node": ">=24",
+    "npm": ">=10"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.1",
+    "@types/node": "^24.0.14",
+    "eslint": "^9.30.1",
+    "tsx": "^4.20.3",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.35.1",
+    "vite": "^7.0.4"
+  },
+  "dependencies": {
+    "goober": "^2.1.16",
+    "deepmerge-ts": "^7.1.5"
+  }
+}
