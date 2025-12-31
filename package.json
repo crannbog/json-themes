@@ -21,7 +21,8 @@
     "build": "tsc && vite build  && npm run pkg-json && cp ./src/types.ts ./dist/types.ts && cp ./README.md ./dist/README.md && cp ./LICENSE ./dist/LICENSE",
     "preview": "vite preview",
     "test": "tsc --noEmit && node src/tests/index.ts",
-    "pub": "npm run lint && npm test && npm run handle-version && npm run build && cd ./dist && npm publish"
+    "handle-version": "node scripts/handle-version.cjs",
+    "pub": "npm test && npm run handle-version && npm run build && cd ./dist && npm publish"
   },
   "keywords": [
     "react",
