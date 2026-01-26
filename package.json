@@ -1,7 +1,7 @@
 {
   "name": "@crannbog/json-themes",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "A toolbox around theming for component libraries for SPAs, MPAs, SSGs",
   "type": "module",
   "main": "./dist/json-themes.umd.cjs",
