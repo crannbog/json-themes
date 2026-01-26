@@ -137,13 +137,14 @@ export namespace JSONThemes {
   /** ============= Box ============= */
 
   export type BoxShape = Extendable<{
-    height?:    Definition
-    width?:     Definition
-    padding?:   Definition
-    transform?: Definition
-    borderSet?: Reference | BorderSet
-    colorSet?:  Reference | ColorSet
-    fontSet?:   Reference | FontSet
+    aspectRatio?: Definition
+    height?:      Definition
+    width?:       Definition
+    padding?:     Definition
+    transform?:   Definition
+    borderSet?:   Reference | BorderSet
+    colorSet?:    Reference | ColorSet
+    fontSet?:     Reference | FontSet
   }>;
 
   export type BoxSet = Set<BoxShape & {

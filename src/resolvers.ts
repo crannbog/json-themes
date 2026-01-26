@@ -406,6 +406,10 @@ export const boxDefToCssProps = (
       height: resolveGlobalsVarString(boxDef.height, theme)
     });
 
+  if (boxDef.aspectRatio)
+    res.push({
+      aspectRatio: resolveGlobalsVarString(boxDef.aspectRatio, theme)
+    });
 
   if (boxDef.width)
     res.push({
