@@ -115,16 +115,17 @@ export namespace JSONThemes {
 
   export type BorderDefinition = {
     image?: Definition
-    style:  "dotted" | "dashed" | "solid" | "double" | "groove" | "ridge" | "inset" | "outset" | "none" | "hidden" | Defaults
-    width:  Definition
+    style?: "dotted" | "dashed" | "solid" | "double" | "groove" | "ridge" | "inset" | "outset" | "none" | "hidden" | Defaults
+    width?: Definition
   };
 
   export type BorderShape = Extendable<{
-    radius?: Definition
-    bottom?: BorderDefinition
-    left?:   BorderDefinition
-    right?:  BorderDefinition
-    top?:    BorderDefinition
+    radius?:   Definition
+    clipPath?: Definition
+    bottom?:   BorderDefinition
+    left?:     BorderDefinition
+    right?:    BorderDefinition
+    top?:      BorderDefinition
   } & BorderDefinition>;
 
   export type BorderSet = Set<BorderShape>;

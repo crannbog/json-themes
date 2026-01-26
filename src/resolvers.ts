@@ -143,7 +143,8 @@ const borderSetToCss = (borderSet: JSONThemes.BorderSet | string, theme: JSONThe
       bmp.left && resolveDefinition(bmp.left, "-left"),
       bmp.right && resolveDefinition(bmp.right, "-right"),
       bmp.top && resolveDefinition(bmp.top, "-top"),
-      bmp.radius && { "border-radius": resolveGlobalsVarString(bmp.radius, theme) }
+      bmp.radius && { "border-radius": resolveGlobalsVarString(bmp.radius, theme) },
+      bmp.clipPath && { "clip-path": resolveGlobalsVarString(bmp.clipPath, theme) }
     );
   };
 
